@@ -1,0 +1,44 @@
+FROM ubuntu:bionic-20190912.1 as base
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+	vim \
+	wget \
+	openssl \
+	openvpn \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& cd /tmp \
+	&& wget --no-check-certificate https://github.com/OpenVPN/easy-rsa/releases/download/v3.0.6/EasyRSA-unix-v3.0.6.tgz
+
+RUN cd /tmp \
+	&& tar xvf EasyRSA-unix-v3.0.6.tgz \
+	&& mv /tmp/EasyRSA-v3.0.6/ /tmp/EasyRSA-v3.0.6-CA \
+	&& tar xvf EasyRSA-unix-v3.0.6.tgz \
+	&& mv /tmp/EasyRSA-v3.0.6/ /tmp/EasyRSA-v3.0.6-vpn \
+	&& rm -rf /tmp/EasyRSA-unix-v3.0.6.tgz \
+	&& cd /tmp/EasyRSA-v3.0.6-CA \
+	&& cp vars.example vars \
+	&& echo 'set_var EASYRSA_REQ_COUNTRY    "US"\nset_var EASYRSA_REQ_PROVINCE   "CA"\nset_var EASYRSA_REQ_CITY       "SF"\nset_var EASYRSA_REQ_ORG        "JVPN"\nset_var EASYRSA_REQ_EMAIL      "j@example.com"\nset_var EASYRSA_REQ_OU         "JVPN"' >> vars 
+
+
+WORKDIR /tmp
+
+COPY openvpn_install.sh /tmp
+RUN chmod +x /tmp/openvpn_install.sh
+
+COPY server.conf /etc/openvpn/server.conf
+
+COPY client_base.conf /tmp/client-configs/client_base.conf
+RUN mkdir -p /tmp/client-configs/files
+
+COPY make_config.sh /tmp/client-configs/make_config.sh
+RUN chmod +x /tmp/client-configs/make_config.sh
+
+RUN echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
+
+RUN echo '/usr/sbin/openvpn --status /run/openvpn/server.status 10 --cd /etc/openvpn --script-security 2 --config /etc/openvpn/server.conf' >> /tmp/start_openvpn.sh \
+	&& chmod +x /tmp/start_openvpn.sh
+
+RUN groupadd nobody
+
+ENTRYPOINT /tmp/openvpn_install.sh && /bin/bash
+
